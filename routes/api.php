@@ -39,6 +39,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('/payments/create',            [PaymentController::class, 'create']);
     Route::post('/payments/check-status',      [PaymentController::class, 'checkStatus']);
     Route::get('/payments/status/{orderId}',   [PaymentController::class, 'status']);
+    Route::get('/payments/pending',           [PaymentController::class, 'pendingList']);
+    Route::post('/payments/{orderId}/reopen', [PaymentController::class, 'reopen']);
 });
 
 // ── ADMIN ──

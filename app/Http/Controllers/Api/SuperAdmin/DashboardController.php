@@ -8,6 +8,7 @@ use App\Models\Destination;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
@@ -17,7 +18,6 @@ class DashboardController extends Controller
         $superAdminRole = Role::where('name', 'super_admin')->first();
         $userRole       = Role::where('name', 'user')->first();
 
-        // Pendapatan = confirmed + used (keduanya sudah lunas)
         $totalPendapatan = Ticket::whereIn('status', ['confirmed', 'used'])
             ->sum('total_price');
 
@@ -29,27 +29,38 @@ class DashboardController extends Controller
             'total_admins'       => $adminRole      ? $adminRole->users()->count()      : 0,
             'total_super_admins' => $superAdminRole ? $superAdminRole->users()->count() : 0,
             'total_users_role'   => $userRole       ? $userRole->users()->count()       : 0,
-            // Breakdown status tiket
             'tiket_confirmed'    => Ticket::where('status', 'confirmed')->count(),
             'tiket_used'         => Ticket::where('status', 'used')->count(),
             'tiket_pending'      => Ticket::where('status', 'pending')->count(),
             'tiket_cancelled'    => Ticket::where('status', 'cancelled')->count(),
         ];
 
-        // Chart 6 bulan terakhir
+        $bulanLabels = ['Jan','Feb','Mar','Apr','Mei','Jun',
+                        'Jul','Agu','Sep','Okt','Nov','Des'];
+
+        // ── KUNCI FIX: mulai dari awal bulan ini, lalu mundur ──
+        // Pakai Carbon::today()->startOfMonth() sebagai titik awal
+        // agar tidak ada efek overflow tanggal 31
+        $startOfThisMonth = Carbon::today()->startOfMonth();
+
         $chartData = [];
         for ($i = 5; $i >= 0; $i--) {
-            $date = now()->subMonths($i);
+            // Clone startOfThisMonth, lalu mundur $i bulan
+            // Karena sudah dari tgl 1, subMonths tidak akan overflow
+            $bulan  = $startOfThisMonth->copy()->subMonths($i);
+            $tahun  = $bulan->year;
+            $bulanN = $bulan->month;
+
             $chartData[] = [
-                'bulan'      => $date->format('M'),
-                'pengguna'   => User::whereYear('created_at', $date->year)
-                                    ->whereMonth('created_at', $date->month)
+                'bulan'      => $bulanLabels[$bulanN - 1],
+                'pengguna'   => User::whereYear('created_at', $tahun)
+                                    ->whereMonth('created_at', $bulanN)
                                     ->count(),
-                'tiket'      => Ticket::whereYear('created_at', $date->year)
-                                    ->whereMonth('created_at', $date->month)
+                'tiket'      => Ticket::whereYear('created_at', $tahun)
+                                    ->whereMonth('created_at', $bulanN)
                                     ->count(),
-                'pendapatan' => (int) Ticket::whereYear('created_at', $date->year)
-                                    ->whereMonth('created_at', $date->month)
+                'pendapatan' => (int) Ticket::whereYear('created_at', $tahun)
+                                    ->whereMonth('created_at', $bulanN)
                                     ->whereIn('status', ['confirmed', 'used'])
                                     ->sum('total_price'),
             ];
@@ -61,7 +72,6 @@ class DashboardController extends Controller
         ]);
     }
 
-    // GET /api/v1/super-admin/settings
     public function settings()
     {
         try {
@@ -78,7 +88,6 @@ class DashboardController extends Controller
         }
     }
 
-    // PUT /api/v1/super-admin/settings
     public function updateSettings(Request $request)
     {
         try {
@@ -90,7 +99,7 @@ class DashboardController extends Controller
             }
             return response()->json(['message' => 'Pengaturan berhasil disimpan']);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal menyimpan: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal: ' . $e->getMessage()], 500);
         }
     }
 }

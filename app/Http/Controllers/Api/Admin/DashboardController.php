@@ -6,77 +6,118 @@ use App\Http\Controllers\Controller;
 use App\Models\Destination;
 use App\Models\Ticket;
 use App\Models\Review;
+use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
-    private function adminDestId()
-    {
-        return auth()->user()->destination_id;
-    }
-
     public function index()
     {
-        $user   = auth()->user();
+        $user         = auth()->user();
         $isSuperAdmin = $user->hasRole('super_admin');
-        $destId = $this->adminDestId();
+        $destId       = $user->destination_id;
 
         if (!$isSuperAdmin && !$destId) {
             return response()->json([
-                'stats'          => ['total_tiket' => 0, 'total_review' => 0, 'total_pendapatan' => 0, 'destinasi' => null],
+                'stats' => [
+                    'total_tiket'      => 0,
+                    'total_review'     => 0,
+                    'total_pendapatan' => 0,
+                    'total_destinasi'  => 0,
+                    'destinasi'        => null,
+                    'tiket_confirmed'  => 0,
+                    'tiket_used'       => 0,
+                    'tiket_pending'    => 0,
+                    'tiket_cancelled'  => 0,
+                ],
                 'recent_tickets' => [],
                 'chart_data'     => [],
                 'warning'        => 'Akun admin belum di-assign ke destinasi. Hubungi Super Admin.',
             ]);
         }
 
-        $destination = $destId ? Destination::find($destId) : null;
+        $bulanLabels      = ['Jan','Feb','Mar','Apr','Mei','Jun',
+                             'Jul','Agu','Sep','Okt','Nov','Des'];
+        $startOfThisMonth = Carbon::today()->startOfMonth();
 
-        // Query builder — filter per destinasi kalau bukan super_admin
-        $ticketQuery  = Ticket::query();
-        $reviewQuery  = Review::query();
+        if ($isSuperAdmin) {
+            $totalDestinasi  = Destination::count();
+            $totalTiket      = Ticket::count();
+            $totalReview     = Review::count();
+            $totalPendapatan = Ticket::whereIn('status', ['confirmed','used'])->sum('total_price');
+            $destNama        = 'Semua Destinasi';
 
-        if (!$isSuperAdmin && $destId) {
-            $ticketQuery->where('destination_id', $destId);
-            $reviewQuery->where('destination_id', $destId);
-        }
+            $tiketConfirmed = Ticket::where('status', 'confirmed')->count();
+            $tiketUsed      = Ticket::where('status', 'used')->count();
+            $tiketPending   = Ticket::where('status', 'pending')->count();
+            $tiketCancelled = Ticket::where('status', 'cancelled')->count();
 
-        // Pendapatan = confirmed + used (keduanya sudah bayar)
-        $pendapatan = (clone $ticketQuery)
-            ->whereIn('status', ['confirmed', 'used'])
-            ->sum('total_price');
+            $recentTickets = Ticket::with(['user', 'destination'])
+                ->orderBy('created_at', 'desc')->limit(8)->get();
 
-        $stats = [
-            'total_tiket'      => (clone $ticketQuery)->count(),
-            'total_review'     => $reviewQuery->count(),
-            'total_pendapatan' => $pendapatan,
-            'destinasi'        => $destination?->nama_wisata,
-        ];
+            $chartData = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $bulan  = $startOfThisMonth->copy()->subMonths($i);
+                $tahun  = $bulan->year;
+                $bulanN = $bulan->month;
+                $chartData[] = [
+                    'bulan'      => $bulanLabels[$bulanN - 1],
+                    'tiket'      => Ticket::whereYear('created_at', $tahun)
+                                        ->whereMonth('created_at', $bulanN)->count(),
+                    'pendapatan' => (int) Ticket::whereYear('created_at', $tahun)
+                                        ->whereMonth('created_at', $bulanN)
+                                        ->whereIn('status', ['confirmed','used'])->sum('total_price'),
+                ];
+            }
+        } else {
+            // Admin biasa — filter by destination_id
+            $destination     = Destination::find($destId);
+            $totalDestinasi  = 1;
+            $totalTiket      = Ticket::where('destination_id', $destId)->count();
+            $totalReview     = Review::where('destination_id', $destId)->count();
+            $totalPendapatan = Ticket::where('destination_id', $destId)
+                                    ->whereIn('status', ['confirmed','used'])->sum('total_price');
+            $destNama        = $destination?->nama_wisata;
 
-        $recentTickets = (clone $ticketQuery)
-            ->with(['user', 'destination'])
-            ->orderBy('created_at', 'desc')
-            ->limit(8)
-            ->get();
+            // Breakdown status — hanya destinasi miliknya
+            $tiketConfirmed = Ticket::where('destination_id', $destId)->where('status', 'confirmed')->count();
+            $tiketUsed      = Ticket::where('destination_id', $destId)->where('status', 'used')->count();
+            $tiketPending   = Ticket::where('destination_id', $destId)->where('status', 'pending')->count();
+            $tiketCancelled = Ticket::where('destination_id', $destId)->where('status', 'cancelled')->count();
 
-        // Chart 6 bulan terakhir
-        $chartData = [];
-        for ($i = 5; $i >= 0; $i--) {
-            $date  = now()->subMonths($i);
-            $base  = (clone $ticketQuery)
-                ->whereYear('created_at', $date->year)
-                ->whereMonth('created_at', $date->month);
+            $recentTickets = Ticket::with(['user', 'destination'])
+                ->where('destination_id', $destId)
+                ->orderBy('created_at', 'desc')->limit(8)->get();
 
-            $chartData[] = [
-                'bulan'      => $date->format('M'),
-                'tiket'      => (clone $base)->count(),
-                'pendapatan' => (int) (clone $base)
-                    ->whereIn('status', ['confirmed', 'used'])
-                    ->sum('total_price'),
-            ];
+            $chartData = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $bulan  = $startOfThisMonth->copy()->subMonths($i);
+                $tahun  = $bulan->year;
+                $bulanN = $bulan->month;
+                $chartData[] = [
+                    'bulan'      => $bulanLabels[$bulanN - 1],
+                    'tiket'      => Ticket::where('destination_id', $destId)
+                                        ->whereYear('created_at', $tahun)
+                                        ->whereMonth('created_at', $bulanN)->count(),
+                    'pendapatan' => (int) Ticket::where('destination_id', $destId)
+                                        ->whereYear('created_at', $tahun)
+                                        ->whereMonth('created_at', $bulanN)
+                                        ->whereIn('status', ['confirmed','used'])->sum('total_price'),
+                ];
+            }
         }
 
         return response()->json([
-            'stats'          => $stats,
+            'stats' => [
+                'total_tiket'      => $totalTiket,
+                'total_review'     => $totalReview,
+                'total_pendapatan' => $totalPendapatan,
+                'total_destinasi'  => $totalDestinasi,
+                'destinasi'        => $destNama,
+                'tiket_confirmed'  => $tiketConfirmed,
+                'tiket_used'       => $tiketUsed,
+                'tiket_pending'    => $tiketPending,
+                'tiket_cancelled'  => $tiketCancelled,
+            ],
             'recent_tickets' => $recentTickets,
             'chart_data'     => $chartData,
         ]);

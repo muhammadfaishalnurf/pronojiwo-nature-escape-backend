@@ -10,6 +10,7 @@ class Payment extends Model
         'ticket_id',
         'user_id',
         'order_id',
+        'snap_token',
         'amount',
         'status',
         'payment_method',

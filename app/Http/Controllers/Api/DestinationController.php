@@ -30,9 +30,10 @@ class DestinationController extends Controller
     // GET /api/v1/admin/destinations — ADMIN (hanya destinasi miliknya)
     public function adminIndex()
     {
-        $user = auth()->user();
+        $user   = auth()->user();
+        $destId = $user->destination_id;
 
-        // Super admin lihat SEMUA destinasi
+        // Super admin lihat SEMUA destinasi (tidak perlu destination_id)
         if ($user->hasRole('super_admin')) {
             $destinations = Destination::orderBy('created_at', 'desc')
                 ->get()
@@ -41,9 +42,7 @@ class DestinationController extends Controller
             return response()->json(['data' => $destinations]);
         }
 
-        // Admin biasa — hanya lihat destinasi miliknya
-        $destId = $user->destination_id;
-
+        // Admin biasa — belum di-assign
         if (!$destId) {
             return response()->json([
                 'data'    => [],
@@ -51,6 +50,7 @@ class DestinationController extends Controller
             ]);
         }
 
+        // Admin biasa — hanya destinasi miliknya
         $destinations = Destination::where('id', $destId)
             ->get()
             ->map(fn($d) => $this->formatFoto($d));
@@ -74,7 +74,7 @@ class DestinationController extends Controller
             'deskripsi'   => 'nullable|string',
             'lokasi_rute' => 'nullable|string',
             'is_active'   => 'nullable',
-            'foto'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'foto'        => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,avif|max:5120',
         ]);
 
         $data = [
@@ -115,7 +115,7 @@ class DestinationController extends Controller
             'deskripsi'   => 'nullable|string',
             'lokasi_rute' => 'nullable|string',
             'is_active'   => 'nullable',
-            'foto'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'foto'        => 'nullable|file|mimes:jpg,jpeg,png,webp,gif,avif|max:5120',
         ]);
 
         $data = [];
