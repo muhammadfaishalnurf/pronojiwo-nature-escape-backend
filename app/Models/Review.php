@@ -8,22 +8,20 @@ class Review extends Model
 {
     protected $fillable = [
         'user_id',
+        'nama',
         'destination_id',
         'rating',
         'ulasan',
-    ];
-
-    protected $casts = [
-        'rating' => 'integer',
+        'tanggal_label',
     ];
 
     public function user()
     {
-        return $this->belongsTo(\App\Models\User::class);
+        return $this->belongsTo(User::class);
     }
 
     public function destination()
     {
-        return $this->belongsTo(\App\Models\Destination::class);
+        return $this->belongsTo(Destination::class);
     }
 }

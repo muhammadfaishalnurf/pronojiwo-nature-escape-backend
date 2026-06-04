@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Destination;
 use App\Models\Ticket;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 use Carbon\Carbon;
@@ -18,8 +19,7 @@ class DashboardController extends Controller
         $superAdminRole = Role::where('name', 'super_admin')->first();
         $userRole       = Role::where('name', 'user')->first();
 
-        $totalPendapatan = Ticket::whereIn('status', ['confirmed', 'used'])
-            ->sum('total_price');
+        $totalPendapatan = Ticket::whereIn('status', ['confirmed', 'used'])->sum('total_price');
 
         $stats = [
             'total_users'        => User::count(),
@@ -35,34 +35,20 @@ class DashboardController extends Controller
             'tiket_cancelled'    => Ticket::where('status', 'cancelled')->count(),
         ];
 
-        $bulanLabels = ['Jan','Feb','Mar','Apr','Mei','Jun',
-                        'Jul','Agu','Sep','Okt','Nov','Des'];
-
-        // ── KUNCI FIX: mulai dari awal bulan ini, lalu mundur ──
-        // Pakai Carbon::today()->startOfMonth() sebagai titik awal
-        // agar tidak ada efek overflow tanggal 31
+        $bulanLabels      = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
         $startOfThisMonth = Carbon::today()->startOfMonth();
 
         $chartData = [];
         for ($i = 5; $i >= 0; $i--) {
-            // Clone startOfThisMonth, lalu mundur $i bulan
-            // Karena sudah dari tgl 1, subMonths tidak akan overflow
             $bulan  = $startOfThisMonth->copy()->subMonths($i);
             $tahun  = $bulan->year;
             $bulanN = $bulan->month;
-
             $chartData[] = [
                 'bulan'      => $bulanLabels[$bulanN - 1],
-                'pengguna'   => User::whereYear('created_at', $tahun)
-                                    ->whereMonth('created_at', $bulanN)
-                                    ->count(),
-                'tiket'      => Ticket::whereYear('created_at', $tahun)
-                                    ->whereMonth('created_at', $bulanN)
-                                    ->count(),
-                'pendapatan' => (int) Ticket::whereYear('created_at', $tahun)
-                                    ->whereMonth('created_at', $bulanN)
-                                    ->whereIn('status', ['confirmed', 'used'])
-                                    ->sum('total_price'),
+                'pengguna'   => User::whereYear('created_at', $tahun)->whereMonth('created_at', $bulanN)->count(),
+                'tiket'      => Ticket::whereYear('created_at', $tahun)->whereMonth('created_at', $bulanN)->count(),
+                'pendapatan' => (int) Ticket::whereYear('created_at', $tahun)->whereMonth('created_at', $bulanN)
+                                    ->whereIn('status', ['confirmed', 'used'])->sum('total_price'),
             ];
         }
 
@@ -72,34 +58,28 @@ class DashboardController extends Controller
         ]);
     }
 
+    // GET /api/v1/super-admin/settings
     public function settings()
     {
-        try {
-            $settings = \App\Models\Setting::pluck('value', 'key')->toArray();
-            return response()->json($settings);
-        } catch (\Exception $e) {
-            return response()->json([
-                'app_name'        => 'Pronojiwo Nature Escape',
-                'contact_phone'   => '',
-                'contact_email'   => '',
-                'contact_address' => '',
-                'about_text'      => '',
-            ]);
-        }
+        $settings = Setting::getAllAsArray();
+        return response()->json($settings);
     }
 
+    // PUT /api/v1/super-admin/settings
     public function updateSettings(Request $request)
     {
-        try {
-            foreach ($request->all() as $key => $value) {
-                \App\Models\Setting::updateOrCreate(
-                    ['key' => $key],
-                    ['value' => $value]
-                );
-            }
-            return response()->json(['message' => 'Pengaturan berhasil disimpan']);
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal: ' . $e->getMessage()], 500);
+        $request->validate([
+            'app_name'        => 'nullable|string|max:255',
+            'contact_phone'   => 'nullable|string|max:20',
+            'contact_email'   => 'nullable|email|max:255',
+            'contact_address' => 'nullable|string|max:500',
+            'about_text'      => 'nullable|string',
+        ]);
+
+        foreach ($request->only(['app_name','contact_phone','contact_email','contact_address','about_text']) as $key => $value) {
+            Setting::updateOrCreate(['key' => $key], ['value' => $value ?? '']);
         }
+
+        return response()->json(['message' => 'Pengaturan berhasil disimpan']);
     }
 }

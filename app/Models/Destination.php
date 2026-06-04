@@ -8,20 +8,23 @@ class Destination extends Model
 {
     protected $fillable = [
         'nama_wisata',
+        'kategori',
         'deskripsi',
         'lokasi_rute',
         'harga_tiket',
         'kapasitas',
         'foto',
-        'rating',
         'is_active',
+        'rating',
+        'koordinat',
+        'fasilitas',
     ];
 
     protected $casts = [
-        'is_active'   => 'boolean',
         'harga_tiket' => 'float',
-        'rating'      => 'float',
         'kapasitas'   => 'integer',
+        'rating'      => 'float',
+        'is_active'   => 'boolean',
     ];
 
     public function tickets()
@@ -32,5 +35,12 @@ class Destination extends Model
     public function reviews()
     {
         return $this->hasMany(\App\Models\Review::class);
+    }
+
+    // Helper: fasilitas sebagai array
+    public function getFasilitasArrayAttribute(): array
+    {
+        if (!$this->fasilitas) return [];
+        return array_map('trim', explode(',', $this->fasilitas));
     }
 }

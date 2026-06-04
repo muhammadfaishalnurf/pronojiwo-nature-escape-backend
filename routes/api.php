@@ -1,13 +1,11 @@
 <?php
 
-// ── routes/api.php ── VERSI LENGKAP
-// Pastikan seluruh isi routes/api.php seperti ini:
-
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DestinationController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\PublicSettingsController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Api\Admin\UserController;
@@ -21,6 +19,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/destinations',      [DestinationController::class, 'index']);
     Route::get('/destinations/{id}', [DestinationController::class, 'show']);
     Route::get('/reviews',           [ReviewController::class, 'index']);
+    Route::get('/settings',           [PublicSettingsController::class, 'index']);
 
     // Webhook Midtrans — TANPA auth
     Route::post('/payments/notification', [PaymentController::class, 'notification']);
@@ -34,13 +33,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('/tickets',  [TicketController::class, 'index']);
     Route::post('/tickets', [TicketController::class, 'store']);
 
-    Route::post('/reviews', [ReviewController::class, 'store']);
 
     Route::post('/payments/create',            [PaymentController::class, 'create']);
     Route::post('/payments/check-status',      [PaymentController::class, 'checkStatus']);
     Route::get('/payments/status/{orderId}',   [PaymentController::class, 'status']);
-    Route::get('/payments/pending',           [PaymentController::class, 'pendingList']);
-    Route::post('/payments/{orderId}/reopen', [PaymentController::class, 'reopen']);
 });
 
 // ── ADMIN ──
@@ -59,9 +55,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'is_admin'])->group(funct
     Route::patch('/tickets/{id}/status',        [TicketController::class, 'updateStatus']);
     Route::post('/tickets/{id}/use',            [TicketController::class, 'markUsed']);
 
-    // Reviews
-    Route::get('/reviews',        [ReviewController::class, 'adminIndex']);
-    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
+
 
     // Users (admin lihat saja)
     Route::get('/users', [UserController::class, 'index']);
@@ -72,10 +66,20 @@ Route::prefix('v1/super-admin')->middleware(['auth:sanctum', 'is_super_admin'])-
     Route::get('/dashboard',    [SuperAdminDashboard::class, 'index']);
     Route::get('/settings',     [SuperAdminDashboard::class, 'settings']);
     Route::put('/settings',     [SuperAdminDashboard::class, 'updateSettings']);
-    Route::get('/super-admin/destinations-list', [UserController::class, 'destinationsList']);
+
     Route::get('/users',              [UserController::class, 'index']);
     Route::post('/users',             [UserController::class, 'store']);
     Route::put('/users/{id}',         [UserController::class, 'update']);
     Route::delete('/users/{id}',      [UserController::class, 'destroy']);
     Route::post('/users/{id}/assign-role', [UserController::class, 'assignRole']);
+
+    // Reviews — hanya super admin yang bisa kelola
+    Route::get('/reviews',         [ReviewController::class, 'adminIndex']);
+    Route::post('/reviews',        [ReviewController::class, 'superAdminStore']);
+    Route::put('/reviews/{id}',    [ReviewController::class, 'superAdminUpdate']);
+    Route::delete('/reviews/{id}', [ReviewController::class, 'destroy']);
 });
+
+// Tambahkan 2 route baru ini di grup AUTH (middleware auth:sanctum):
+Route::get('/payments/pending',              [PaymentController::class, 'pendingList']);
+Route::post('/payments/{orderId}/reopen',    [PaymentController::class, 'reopen']);
